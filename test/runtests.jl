@@ -33,6 +33,8 @@ using Test
   end
 end
 
+include("test_absyn_dump.jl")
+
 #include("std.jl")
 
 end #= End Absyn tests =#

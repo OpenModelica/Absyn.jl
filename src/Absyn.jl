@@ -59,6 +59,7 @@ using ExportAll
 @UniontypeDecl AlgorithmItem
 @UniontypeDecl Equation
 @UniontypeDecl Algorithm
+@UniontypeDecl WhenClause
 @UniontypeDecl Modification
 @UniontypeDecl EqMod
 @UniontypeDecl ElementArg
@@ -144,7 +145,6 @@ if this class is declared as partial, the declared class restriction,
 and the body of the declaration. =#
 @Uniontype Class begin
   @Record CLASS begin
-
     name::Ident
     partialPrefix #= true if partial =#::Bool
     finalPrefix #= true if final =#::Bool
@@ -187,7 +187,6 @@ and an optional array dimension and a list of modifications.
   end
 
   @Record OVERLOAD begin
-
     functionNames::List{Path}
     comment::Option{Comment}
   end
@@ -394,23 +393,19 @@ end
   =#
 
   @Record NAMED_IMPORT begin
-
     name #= name =#::Ident
     path #= path =#::Path
   end
 
   @Record QUAL_IMPORT begin
-
     path #= path =#::Path
   end
 
   @Record UNQUAL_IMPORT begin
-
     path #= path =#::Path
   end
 
   @Record GROUP_IMPORT begin
-
     prefix::Path
     groups::List{GroupImport}
   end
@@ -418,12 +413,10 @@ end
 
 @Uniontype GroupImport begin
   @Record GROUP_IMPORT_NAME begin
-
     name::String
   end
 
   @Record GROUP_IMPORT_RENAME begin
-
     rename::String
     name::String
   end
@@ -524,6 +517,32 @@ kinds of equations =#
   @Record EQ_FAILURE begin
     equ::EquationItem
   end
+
+  #= Agentic Modelica: reconfigure block.
+     Two modes depending on which optional field is present:
+       - Agentic mode  (prompt present):       consults an external LLM agent.
+       - VSS mode (modification present): applies assignments in modification block directly.
+     The upon-clauses (now optional) constrain valid configurations in both modes. =#
+  @Record EQ_RECONFIGURE begin
+    variables         #= Optional structural parameter declarations =#::List{ElementItem}
+    whenClauses       #= Trigger condition and optional invariant =#::List{WhenClause}
+    prompt            #= Agentic mode: natural-language hint for LLM agent =#::Option{Exp}
+    modification      #= VSS mode: equations assigning new parameter values =#::Option{List{EquationItem}}
+    initialEquations  #= Constraints checked at recompilation time =#::Option{List{EquationItem}}
+  end
+end
+
+#= A when-clause declares the agent trigger and an optional invariant.
+   - WHEN_TRIGGER(E)         means E fires the agent (no post-condition).
+   - WHEN_CONDITIONAL(C, E)  means C fires the agent; E must hold after reconfig. =#
+@Uniontype WhenClause begin
+  @Record WHEN_TRIGGER begin
+    condition::Exp
+  end
+  @Record WHEN_CONDITIONAL begin
+    condition::Exp
+    constraint::Exp
+  end
 end
 
 #= The Algorithm type describes one algorithm statement in an
@@ -532,13 +551,11 @@ reason this type is named like this is that the name of the
 grammar rule for algorithm statements is `algorithm\\'. =#
 @Uniontype Algorithm begin
   @Record ALG_ASSIGN begin
-
     assignComponent #= assignComponent =#::Exp
     value #= value =#::Exp
   end
 
   @Record ALG_IF begin
-
     ifExp #= ifExp =#::Exp
     trueBranch #= trueBranch =#::List{AlgorithmItem}
     elseIfAlgorithmBranch #= elseIfAlgorithmBranch =#::List{Tuple{Exp, List{AlgorithmItem}}}
@@ -546,60 +563,50 @@ grammar rule for algorithm statements is `algorithm\\'. =#
   end
 
   @Record ALG_FOR begin
-
     iterators::ForIterators
     forBody #= forBody =#::List{AlgorithmItem}
   end
 
   @Record ALG_PARFOR begin
-
     iterators::ForIterators
     parforBody #= parallel for loop Body =#::List{AlgorithmItem}
   end
 
   @Record ALG_WHILE begin
-
     boolExpr #= boolExpr =#::Exp
     whileBody #= whileBody =#::List{AlgorithmItem}
   end
 
   @Record ALG_WHEN_A begin
-
     boolExpr #= boolExpr =#::Exp
     whenBody #= whenBody =#::List{AlgorithmItem}
     elseWhenAlgorithmBranch #= elseWhenAlgorithmBranch =#::List{Tuple{Exp, List{AlgorithmItem}}}
   end
 
   @Record ALG_NORETCALL begin
-
     functionCall #= functionCall =#::ComponentRef
     functionArgs #= functionArgs; general fcalls without return value =#::FunctionArgs
   end
 
   @Record ALG_RETURN begin
-
   end
 
   @Record ALG_BREAK begin
-
   end
 
   #=  MetaModelica extensions
   =#
 
   @Record ALG_FAILURE begin
-
     equ::List{AlgorithmItem}
   end
 
   @Record ALG_TRY begin
-
     body::List{AlgorithmItem}
     elseBody::List{AlgorithmItem}
   end
 
   @Record ALG_CONTINUE begin
-
   end
 end
 
@@ -627,7 +634,6 @@ end
 #= Wrapper for things that modify elements, modifications and redeclarations =#
 @Uniontype ElementArg begin
   @Record MODIFICATION begin
-
     finalPrefix #= final prefix =#::Bool
     eachPrefix #= each =#::Each
     path::Path
@@ -637,7 +643,6 @@ end
   end
 
   @Record REDECLARATION begin
-
     finalPrefix #= final prefix =#::Bool
     redeclareKeywords #= redeclare  or replaceable  =#::RedeclareKeywords
     eachPrefix #= each prefix =#::Each
@@ -650,15 +655,12 @@ end
 #= The keywords redeclare and replacable can be given in three different kombinations, each one by themself or the both combined. =#
 @Uniontype RedeclareKeywords begin
   @Record REDECLARE begin
-
   end
 
   @Record REPLACEABLE begin
-
   end
 
   @Record REDECLARE_REPLACEABLE begin
-
   end
 end
 
@@ -666,11 +668,9 @@ end
 - Each attribute =#
 @Uniontype Each begin
   @Record EACH begin
-
   end
 
   @Record NON_EACH begin
-
   end
 end
 
@@ -864,8 +864,7 @@ end
     comment #=  match expr comment_optional  =#::Option{String}
   end
 
-  #=  The following are only used internally in the compiler
-  =#
+  #= Compiler-internal expression types (not produced by the parser) =#
 
   @Record LIST begin
     exps::List{Exp}
@@ -875,12 +874,27 @@ end
     exp::Exp
     index::Exp
   end
+
+  #= Subscripted expression, e.g. array[index].
+     Constructed programmatically by NFFrontEnd (enum conversion functions). =#
+  @Record SUBSCRIPTED_EXP begin
+    exp::Exp
+    subscripts::List{Subscript}
+  end
+
+  #= Expression wrapped with before/after comments from the source.
+     Upstream signature: EXPRESSIONCOMMENT(list<String>, Exp, list<String>).
+     Not produced by OMParser.jl (expression-level comment collection is missing). =#
+  @Record EXPRESSIONCOMMENT begin
+    commentBefore::List{String}
+    exp::Exp
+    commentAfter::List{String}
+  end
 end
 
 #= case in match or matchcontinue =#
 @Uniontype Case begin
   @Record CASE begin
-
     pattern #=  patterns to be matched  =#::Exp
     patternGuard::Option{Exp}
     patternInfo #= file information of the pattern =#::Info
@@ -893,7 +907,6 @@ end
   end
 
   @Record ELSE begin
-
     localDecls #=  local decls  =#::List{ElementItem}
     classPart #=  equation or algorithm section  =#::ClassPart
     result #=  result  =#::Exp
@@ -905,56 +918,46 @@ end
 
 @Uniontype MatchType begin
   @Record MATCH begin
-
   end
 
   @Record MATCHCONTINUE begin
-
   end
 end
 
 #= The Code uniontype is used for Meta-programming. It originates from the $Code quoting mechanism. See paper in Modelica2003 conference =#
 @Uniontype CodeNode begin
   @Record C_TYPENAME begin
-
     path::Path
   end
 
   @Record C_VARIABLENAME begin
-
     componentRef::ComponentRef
   end
 
   @Record C_CONSTRAINTSECTION begin
-
     boolean::Bool
     equationItemLst::List{EquationItem}
   end
 
   @Record C_EQUATIONSECTION begin
-
     boolean::Bool
     equationItemLst::List{EquationItem}
   end
 
   @Record C_ALGORITHMSECTION begin
-
     boolean::Bool
     algorithmItemLst::List{AlgorithmItem}
   end
 
   @Record C_ELEMENT begin
-
     element::Element
   end
 
   @Record C_EXPRESSION begin
-
     exp::Exp
   end
 
   @Record C_MODIFICATION begin
-
     modification::Modification
   end
 end
@@ -963,13 +966,11 @@ end
 followed by a list of named arguments (Modelica v2.0) =#
 @Uniontype FunctionArgs begin
   @Record FUNCTIONARGS begin
-
     args #= args =#::List{Exp}
     argNames #= argNames =#::List{NamedArg}
   end
 
   @Record FOR_ITER_FARG begin
-
     exp #= iterator expression =#::Exp
     iterType::ReductionIterType
     iterators::ForIterators
@@ -980,11 +981,9 @@ const emptyFunctionArgs = FUNCTIONARGS(list(), list())::FunctionArgs
 
 @Uniontype ReductionIterType begin
   @Record COMBINE begin
-
   end
 
   @Record THREAD begin
-
   end
 end
 
@@ -992,7 +991,6 @@ end
 giving the value of the argument =#
 @Uniontype NamedArg begin
   @Record NAMEDARG begin
-
     argName #= argName =#::Ident
     argValue #= argValue =#::Exp
   end
@@ -1003,101 +1001,78 @@ end
   #= /* arithmetic operators */ =#
 
   @Record ADD begin
-
   end
 
   @Record SUB begin
-
   end
 
   @Record MUL begin
-
   end
 
   @Record DIV begin
-
   end
 
   @Record POW begin
-
   end
 
   @Record UPLUS begin
-
   end
 
   @Record UMINUS begin
-
   end
 
   #= /* element-wise arithmetic operators */ =#
 
   @Record ADD_EW begin
-
   end
 
   @Record SUB_EW begin
-
   end
 
   @Record MUL_EW begin
-
   end
 
   @Record DIV_EW begin
-
   end
 
   @Record POW_EW begin
-
   end
 
   @Record UPLUS_EW begin
-
   end
 
   @Record UMINUS_EW begin
-
   end
 
   #= /* logical operators */ =#
 
   @Record AND begin
-
   end
 
   @Record OR begin
-
   end
 
   @Record NOT begin
-
   end
 
   #= /* relational operators */ =#
 
   @Record LESS begin
-
   end
 
   @Record LESSEQ begin
-
   end
 
   @Record GREATER begin
-
   end
 
   @Record GREATEREQ begin
-
   end
 
   @Record EQUAL begin
-
   end
 
   @Record NEQUAL begin
-
   end
 end
 
@@ -1123,29 +1098,24 @@ identifier--subscript pairs.
 - Component references and paths =#
 @Uniontype ComponentRef begin
   @Record CREF_FULLYQUALIFIED begin
-
     componentRef::ComponentRef
   end
 
   @Record CREF_QUAL begin
-
     name #= name =#::Ident
     subscripts #= subscripts =#::List{Subscript}
     componentRef #= componentRef =#::ComponentRef
   end
 
   @Record CREF_IDENT begin
-
     name #= name =#::Ident
     subscripts #= subscripts =#::List{Subscript}
   end
 
   @Record WILD begin
-
   end
 
   @Record ALLWILD begin
-
   end
 end
 
@@ -1261,7 +1231,6 @@ assigned special restrictions.
   end
 
   @Record R_UNKNOWN begin
-
   end
 
   #= /* added by simbj */ =#
@@ -1270,34 +1239,27 @@ end
 #= function purity =#
 @Uniontype FunctionPurity begin
   @Record PURE begin
-
   end
 
   @Record IMPURE begin
-
   end
 
   @Record NO_PURITY begin
-
   end
 end
 
 @Uniontype FunctionRestriction begin
   @Record FR_NORMAL_FUNCTION begin
-
     purity #= function purity =#::FunctionPurity
   end
 
   @Record FR_OPERATOR_FUNCTION begin
-
   end
 
   @Record FR_PARALLEL_FUNCTION begin
-
   end
 
   @Record FR_KERNEL_FUNCTION begin
-
   end
 end
 
@@ -1305,7 +1267,6 @@ end
 - Annotation =#
 @Uniontype Annotation begin
   @Record ANNOTATION begin
-
     elementArgs #= elementArgs =#::List{ElementArg}
   end
 end
@@ -1313,7 +1274,6 @@ end
 #= Comment =#
 @Uniontype Comment begin
   @Record COMMENT begin
-
     annotation_ #= annotation =#::Option{Annotation}
     comment #= comment =#::Option{String}
   end
@@ -1322,7 +1282,6 @@ end
 #= Declaration of an external function call - ExternalDecl =#
 @Uniontype ExternalDecl begin
   @Record EXTERNALDECL begin
-
     funcName #= The name of the external function =#::Option{Ident}
     lang #= Language of the external function =#::Option{String}
     output_ #= output parameter as return value =#::Option{ComponentRef}
@@ -1354,6 +1313,28 @@ end
   @Record NO_MSG begin
   end
 end
+
+#= Modelica pretty-printing functions (dumpExp, dumpCref, dumpTypeSpec, etc.) =#
+include("absynDump.jl")
+
+#= Ordering on Path so that sort() works (needed by NFFrontEnd for derivative/inverse annotations).
+   Self-contained reimplementation of AbsynUtil.pathCompare to avoid circular dependency. =#
+function _pathCompare(p1::Path, p2::Path)::Int
+  @match (p1, p2) begin
+    (FULLYQUALIFIED(q1), FULLYQUALIFIED(q2)) => _pathCompare(q1, q2)
+    (FULLYQUALIFIED(__), _) => 1
+    (_, FULLYQUALIFIED(__)) => -1
+    (QUALIFIED(n1, rest1), QUALIFIED(n2, rest2)) => begin
+      c = cmp(n1, n2)
+      c != 0 ? c : _pathCompare(rest1, rest2)
+    end
+    (QUALIFIED(__), _) => 1
+    (_, QUALIFIED(__)) => -1
+    (IDENT(n1), IDENT(n2)) => cmp(n1, n2)
+  end
+end
+
+Base.isless(p1::Path, p2::Path) = _pathCompare(p1, p2) < 0
 
 #= So that we can use wildcard imports and named imports when they do occur. Not good Julia practice =#
 @exportAll()
