@@ -650,6 +650,13 @@ end
     constrainClass #= class definition or declaration =#::Option{ConstrainClass}
     info #= needed because ElementSpec does not contain this info; Element does =#::Info
   end
+
+  #= Selective model extension (Modelica 3.6), `extends A(break x)` or `extends A(break
+     connect(a, b))`. `break x` is stored as connect(break, x), as omc does. =#
+  @Record INHERITANCEBREAK begin
+    cnct::Equation
+    info::Info
+  end
 end
 
 #= The keywords redeclare and replacable can be given in three different kombinations, each one by themself or the both combined. =#
@@ -889,6 +896,10 @@ end
     commentBefore::List{String}
     exp::Exp
     commentAfter::List{String}
+  end
+
+  #= `break` as a modifier's value (Modelica 3.6, `x = break`): removes the binding. =#
+  @Record BREAK begin
   end
 end
 
