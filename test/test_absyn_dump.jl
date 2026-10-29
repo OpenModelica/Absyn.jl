@@ -55,6 +55,24 @@
     @test Absyn.dumpExp(BINARY(INTEGER(1), ADD(), INTEGER(2))) == "1 + 2"
     @test Absyn.dumpExp(UNARY(UMINUS(), CREF(CREF_IDENT("a", nil)))) == "-a"
     @test Absyn.dumpExp(BINARY(UNARY(UMINUS(), CREF(CREF_IDENT("a", nil))), MUL(), CREF(CREF_IDENT("x", nil)))) == "-a*x"
+    local a = CREF(CREF_IDENT("a", nil))
+    local b = CREF(CREF_IDENT("b", nil))
+    local c = CREF(CREF_IDENT("c", nil))
+    #= parentheses where Modelica needs them, none where it does not =#
+    @test Absyn.dumpExp(BINARY(INTEGER(2), MUL(), BINARY(INTEGER(3), ADD(), INTEGER(4)))) == "2*(3 + 4)"
+    @test Absyn.dumpExp(BINARY(BINARY(INTEGER(1), ADD(), INTEGER(2)), MUL(), INTEGER(3))) == "(1 + 2)*3"
+    @test Absyn.dumpExp(BINARY(BINARY(a, SUB(), b), SUB(), c)) == "a - b - c"
+    @test Absyn.dumpExp(BINARY(a, SUB(), BINARY(b, SUB(), c))) == "a - (b - c)"
+    @test Absyn.dumpExp(BINARY(a, ADD(), BINARY(b, MUL(), c))) == "a + b*c"
+    @test Absyn.dumpExp(BINARY(a, ADD(), UNARY(UMINUS(), b))) == "a + (-b)"
+    @test Absyn.dumpExp(UNARY(UMINUS(), BINARY(a, ADD(), b))) == "-(a + b)"
+    @test Absyn.dumpExp(BINARY(UNARY(UMINUS(), a), POW(), INTEGER(2))) == "(-a)^2"
+    @test Absyn.dumpExp(BINARY(BINARY(a, POW(), b), POW(), c)) == "(a^b)^c"
+    @test Absyn.dumpExp(LUNARY(NOT(), LBINARY(a, AND(), b))) == "not (a and b)"
+    @test Absyn.dumpExp(LUNARY(NOT(), a)) == "not a"
+    @test Absyn.dumpExp(LBINARY(LBINARY(a, OR(), b), AND(), c)) == "(a or b) and c"
+    @test Absyn.dumpExp(LBINARY(RELATION(a, LESS(), b), AND(), c)) == "a < b and c"
+    @test Absyn.dumpExp(BINARY(IFEXP(a, b, c, nil), ADD(), INTEGER(1))) == "(if a then b else c) + 1"
   end
 
   @testset "dumpExp CALL" begin

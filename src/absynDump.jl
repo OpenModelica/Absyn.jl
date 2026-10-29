@@ -53,11 +53,12 @@ function dumpExp(exp::Exp)::String
     STRING(__) => "\"" * exp.value * "\""
     BOOL(__) => exp.value ? "true" : "false"
     CREF(__) => dumpCref(exp.componentRef)
-    BINARY(__) => dumpExp(exp.exp1) * dumpOperator(exp.op) * dumpExp(exp.exp2)
-    UNARY(__) => dumpOperator(exp.op) * dumpExp(exp.exp)
-    LBINARY(__) => dumpExp(exp.exp1) * dumpOperator(exp.op) * dumpExp(exp.exp2)
-    LUNARY(__) => dumpOperator(exp.op) * " " * dumpExp(exp.exp)
-    RELATION(__) => dumpExp(exp.exp1) * dumpOperator(exp.op) * dumpExp(exp.exp2)
+    BINARY(__) => dumpBinary(exp.exp1, exp.op, exp.exp2, dumpPrecedence(exp))
+    UNARY(__) => dumpOperator(exp.op) * dumpOperand(exp.exp, dumpPrecedence(exp), true)
+    LBINARY(__) => dumpBinary(exp.exp1, exp.op, exp.exp2, dumpPrecedence(exp))
+    LUNARY(__) => dumpOperator(exp.op) * dumpOperand(exp.exp, dumpPrecedence(exp), true)
+    RELATION(__) => dumpOperand(exp.exp1, dumpPrecedence(exp), true) * dumpOperator(exp.op) *
+                    dumpOperand(exp.exp2, dumpPrecedence(exp), true)
     IFEXP(__) => begin
       local s = "if " * dumpExp(exp.ifExp) * " then " * dumpExp(exp.trueBranch)
       for (c, b) in exp.elseIfBranch
@@ -91,6 +92,47 @@ function dumpExp(exp::Exp)::String
     EXPRESSIONCOMMENT(__) => dumpExp(exp.exp)
     _ => "<unknown exp>"
   end
+end
+
+# --- Precedence: parentheses where Modelica needs them ---
+
+"""
+How tightly an expression binds, higher is tighter: if-expressions and ranges, `or`, `and`, `not`, relations,
+`+ -`, `* /`, unary `+ -`, `^`, then primaries. Unary minus binds tighter than `*` (`-a*x`, as omc prints it) and
+looser than `^` (`(-a)^2`).
+"""
+function dumpPrecedence(exp::Exp)::Int
+  if exp isa IFEXP || exp isa RANGE
+    return 0
+  elseif exp isa LBINARY
+    return exp.op isa OR ? 1 : 2
+  elseif exp isa LUNARY
+    return 3
+  elseif exp isa RELATION
+    return 4
+  elseif exp isa BINARY
+    return exp.op isa Union{POW, POW_EW} ? 8 : exp.op isa Union{MUL, DIV, MUL_EW, DIV_EW} ? 6 : 5
+  elseif exp isa UNARY
+    return 7
+  end
+  return 10
+end
+
+"""An operand in parentheses when it binds looser than its operator, or as tightly with `tight`."""
+function dumpOperand(exp::Exp, precedence::Int, tight::Bool)::String
+  local p::Int = dumpPrecedence(exp)
+  local s::String = dumpExp(exp)
+  return (p < precedence || (tight && p == precedence)) ? "(" * s * ")" : s
+end
+
+"""
+A binary or logical operation: the right operand in parentheses also when it binds as tightly (`a - (b - c)`) or is
+a unary operation (`a + (-b)`: Modelica allows a unary operator only at the start); `^` takes no operator
+expression unparenthesised on either side.
+"""
+function dumpBinary(exp1::Exp, op::Operator, exp2::Exp, precedence::Int)::String
+  local right::String = exp2 isa UNARY ? "(" * dumpExp(exp2) * ")" : dumpOperand(exp2, precedence, true)
+  return dumpOperand(exp1, precedence, precedence == 8) * dumpOperator(op) * right
 end
 
 # --- Operator ---
